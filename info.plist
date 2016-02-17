@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>bundleid</key>
+	<string>chanjh's e-book search</string>
+	<key>connections</key>
+	<dict>
+		<key>6EEFDEC2-585E-42A5-B909-396D7FC86759</key>
+		<array>
+			<dict>
+				<key>destinationuid</key>
+				<string>8E96420F-AA45-4FF4-85FC-B71A7AA18C3E</string>
+				<key>modifiers</key>
+				<integer>0</integer>
+				<key>modifiersubtext</key>
+				<string></string>
+			</dict>
+		</array>
+	</dict>
+	<key>createdby</key>
+	<string>chanjh</string>
+	<key>description</key>
+	<string>快速搜索一些免费电子书搜索</string>
+	<key>disabled</key>
+	<false/>
+	<key>name</key>
+	<string>findFreeEbooks</string>
+	<key>objects</key>
+	<array>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>plusspaces</key>
+				<false/>
+				<key>url</key>
+				<string>{query}</string>
+				<key>utf8</key>
+				<true/>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.action.openurl</string>
+			<key>uid</key>
+			<string>8E96420F-AA45-4FF4-85FC-B71A7AA18C3E</string>
+			<key>version</key>
+			<integer>0</integer>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>argumenttype</key>
+				<integer>0</integer>
+				<key>escaping</key>
+				<integer>70</integer>
+				<key>keyword</key>
+				<string>book</string>
+				<key>queuedelaycustom</key>
+				<integer>3</integer>
+				<key>queuedelayimmediatelyinitially</key>
+				<true/>
+				<key>queuedelaymode</key>
+				<integer>0</integer>
+				<key>queuemode</key>
+				<integer>1</integer>
+				<key>runningsubtext</key>
+				<string>Please Wait</string>
+				<key>script</key>
+				<string># -*- coding: utf-8 -*-
+
+
+import urllib2
+from bs4 import BeautifulSoup
+
+import sys
+reload(sys)
+sys.setdefaultencoding("utf-8")
+
+__author__ = 'ChanJH.com'
+
+
+def main():
+    
+    url1 = 'http://readfree.me/search/?q='
+    urldoc1 = urllib2.urlopen( url1 + theQuery ).read()
+    url2 = 'http://readcolor.com/books/search?utf8=%E2%9C%93&amp;s='
+    urldoc2 = urllib2.urlopen( url2 + theQuery ).read()
+
+    # 通过这两个关键字，检索搜索到的书籍数量
+    count1 = urldoc1.count("class=\"pjax\"")/2
+    count2 = urldoc2.count("class=\"book thumbnail\"")
+
+    if count1+count2 == 0:	#搜索不到任何书籍
+        xmldoc = "&lt;?xml version=\"1.0\"?&gt;\n&lt;items&gt;"
+        xmldoc += "&lt;item uid=\"Books\" arg=\"\"&gt;\n&lt;title&gt;没有找到任何有关\""+theQuery+"\"的书籍&lt;/title&gt;\n&lt;subtitle&gt;请检查你的关键字，或更换搜索内容。更多帮助可以输入 Help&lt;/subtitle&gt;\n&lt;icon&gt;icon.png&lt;/icon&gt;&lt;/item&gt;"
+        xmldoc += "&lt;/items&gt;\n"
+        print xmldoc
+
+    else:
+        # 初始化返回值
+        xmldoc = "&lt;?xml version=\"1.0\"?&gt;\n&lt;items&gt;"
+
+        xmldoc,links1 = readFree(urldoc1,xmldoc)
+        xmldoc,links2 = duYuan(urldoc2,xmldoc)
+
+        # 返回值尾巴
+        xmldoc += "&lt;item uid=\"Books\" arg=\"\"&gt;\n&lt;title&gt;有关\""+theQuery+"\"的结果"+str(len(links1)+len(links2)-1)+"个条&lt;/title&gt;\n&lt;subtitle&gt;&lt;/subtitle&gt;\n&lt;icon&gt;icon.png&lt;/icon&gt;&lt;/item&gt;"
+        xmldoc += "&lt;/items&gt;"
+            
+        print xmldoc
+
+def duYuan(urldoc2,xmldoc):
+    soup = BeautifulSoup(urldoc2)
+
+    # 获取作者数组
+    authors = []
+    for author in soup.find_all("li"):
+        if author.get_text(strip=True).find("作者") !=-1 :
+            authors.append(author.get_text(strip=True))
+        else:
+            continue
+
+    # 获取链接和书名
+    links = []
+    for link in soup.find_all('a','book thumbnail'):
+        links.append(link.get('href'))
+        title = link.get('title')
+        xmldoc += "&lt;item uid=\"Books\" arg=\""+link.get('href')+"\"&gt;\n&lt;title&gt;"+title+"&lt;/title&gt;\n&lt;subtitle&gt;"+authors[len(links)]+"｜来源：读远&lt;/subtitle&gt;\n&lt;icon&gt;icon.png&lt;/icon&gt;&lt;/item&gt;"
+
+    return xmldoc,links
+
+def readFree(urldoc1,xmldoc):
+    soup = BeautifulSoup(urldoc1)
+
+    # 获取作者数组
+    authors = []
+    for author in soup.find_all('small'):
+        if author.get_text(strip=True) == "0":
+            continue
+        else:
+            authors.append(author.get_text(strip=True))
+    
+    # 获取链接和书名
+    links = ['None']
+    for link in soup.find_all('a','pjax'):
+        if link.get('href') == links[-1] :
+            continue
+        else :
+            links.append(link.get('href'))
+            title = link.find('img').get('alt')
+            xmldoc += "&lt;item uid=\"Books\" arg=\"http://readfree.me"+link.get('href')+"\"&gt;\n&lt;title&gt;"+title+"&lt;/title&gt;\n&lt;subtitle&gt;作者："+authors[len(links)-2]+"｜来源：readfree.me&lt;/subtitle&gt;\n&lt;icon&gt;icon.png&lt;/icon&gt;&lt;/item&gt;"
+    return xmldoc,links
+
+def youNeedHelp():
+
+    xmldoc = "&lt;?xml version=\"1.0\"?&gt;\n&lt;items&gt;"
+    xmldoc += "&lt;item uid=\"Books\" arg=\"http://chanjh.com/\"&gt;\n&lt;title&gt;打开帮助&lt;/title&gt;\n&lt;subtitle&gt;回车打开网页，查看详情帮助&lt;/subtitle&gt;\n&lt;icon&gt;icon.png&lt;/icon&gt;&lt;/item&gt;"
+    xmldoc += "&lt;/items&gt;\n"
+    print xmldoc
+
+theQuery = "{query}"
+if theQuery.lower() == "help" :
+    youNeedHelp()
+else:
+    main()</string>
+				<key>subtext</key>
+				<string>输入关键字开始搜索 ｜ 输入 Help 获得帮助 ｜ 搜索源：readfree.me、读远</string>
+				<key>title</key>
+				<string>搜索电子书</string>
+				<key>type</key>
+				<integer>3</integer>
+				<key>withspace</key>
+				<true/>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.input.scriptfilter</string>
+			<key>uid</key>
+			<string>6EEFDEC2-585E-42A5-B909-396D7FC86759</string>
+			<key>version</key>
+			<integer>0</integer>
+		</dict>
+	</array>
+	<key>readme</key>
+	<string>这是一个尝试</string>
+	<key>uidata</key>
+	<dict>
+		<key>6EEFDEC2-585E-42A5-B909-396D7FC86759</key>
+		<dict>
+			<key>ypos</key>
+			<real>160</real>
+		</dict>
+		<key>8E96420F-AA45-4FF4-85FC-B71A7AA18C3E</key>
+		<dict>
+			<key>ypos</key>
+			<real>160</real>
+		</dict>
+	</dict>
+	<key>webaddress</key>
+	<string>chanjh.com</string>
+</dict>
+</plist>
